@@ -3,7 +3,7 @@ import requests
 import time
 import re
 
-API_KEY = "AIzaSyD9JVFS9ZBKNpgjQ2F1q4dkAw63StFCltU"
+API_KEY = ""
 
 df_main = pd.read_csv("kaggle_dataset/ted_main.csv")
 df_url = pd.read_csv("kaggle_dataset/transcripts.csv")
