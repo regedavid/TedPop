@@ -222,7 +222,7 @@ def main_script(df_main, df_metadata, video_metadata_path):
     df_main.to_csv("ted_main_refurbished.csv", index=False)
 
 if __name__ == "__main__":
-    API_KEY = "AIzaSyCzw85BiEJ-MSwanZWe92_-xCEuO96ibS0"
+    API_KEY = ""
     OFFICIAL_TED_CHANNEL_ID = "UCAuUUnT6oDeKwE6v1NGQxug"
 
     columns = [
