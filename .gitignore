@@ -61,3 +61,6 @@ Pipfile.lock
 *.webm
 *.part
 *.ytdl
+
+#Lightning logs
+lightning_logs/
