@@ -69,14 +69,14 @@ if __name__ == "__main__":
         csv_file="tedpop/dataset/train.csv",
         text_column="transcript",
         target_column="viewCount",
-        transform_target=lambda x: torch.log1p(torch.tensor(x))
+        transform_target='log'
     )
 
     val_dataset = TEDDataset(
         csv_file="tedpop/dataset/val.csv",
         text_column="transcript",
         target_column="viewCount",
-        transform_target=lambda x: torch.log1p(torch.tensor(x))
+        transform_target='log'
     )
 
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True, collate_fn=lambda batch: collate_fn(batch, tokenizer))

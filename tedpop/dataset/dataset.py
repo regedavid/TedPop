@@ -20,10 +20,11 @@ class TEDDataset(Dataset):
         row = self.data.iloc[idx]
         text = row[self.text_column]
         target = row[self.target_column]
+        target = torch.tensor(target, dtype=torch.float)
         if self.transform_target == 'log':
-            target = self.transform_target(target)
+            target = self.log_transform(target)
 
-        return {"text": text, "target": torch.tensor(target, dtype=torch.float)}
+        return {"text": text, "target": target}
     
     def log_transform(self, target):
         target = torch.log1p(target)
