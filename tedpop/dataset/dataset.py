@@ -4,6 +4,11 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import pandas as pd
+import librosa
+import numpy as np
+import os
+import soundfile as sf
+from torch.nn import functional as F
 
 class TEDDataset(Dataset):
     def __init__(self, csv_file, text_column="transcript", target_column="viewCount", transform_target='log'):
@@ -46,8 +51,44 @@ def collate_fn(batch, tokenizer, max_length=512):
         return_tensors="pt"
     )
 
-    return {
+    batch_dict = {
         "input_ids": tokenized["input_ids"],
         "attention_mask": tokenized["attention_mask"],
         "targets": targets
     }
+    if "audio" in batch[0]:
+        mfccs = [item["audio"] for item in batch]
+        max_time = max(m.shape[1] for m in mfccs)
+
+        # Pad each MFCC to (13, max_time)
+        padded_mfccs = [
+            F.pad(m, (0, max_time - m.shape[1]), mode="constant", value=0) for m in mfccs
+        ]
+
+        audio_batch = torch.stack(padded_mfccs)  # shape: (batch_size, 13, max_time)
+        batch_dict["audio"] = audio_batch
+    
+    return batch_dict
+
+class TEDMultimodalDataset(TEDDataset):
+    def __init__(self, csv_file, audio_dir, text_column="transcript", target_column="viewCount", transform_target='log'):
+        super().__init__(csv_file, text_column, target_column, transform_target)
+        self.audio_dir = audio_dir
+
+    def __getitem__(self, idx):
+        item = super().__getitem__(idx)
+        row = self.data.iloc[idx]
+        
+        talk_id = row['video_id']
+        audio_path = os.path.join(self.audio_dir, f"{talk_id}.wav")
+        audio_fea = self.compute_mfcc(audio_path)
+
+
+        item["audio"] = torch.tensor(audio_fea, dtype=torch.float)
+        return item
+    
+    def compute_mfcc(self, audio_path, sr=16000, n_mfcc=13):
+        y, _ = librosa.load(audio_path, sr=sr)
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+
+        return mfcc
