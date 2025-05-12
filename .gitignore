@@ -55,12 +55,13 @@ Pipfile.lock
 # Coverage directory
 .coverage/
 
-# Exclude video files
+# Exclude video and audio files
 *.mp4
 *.mkv
 *.webm
 *.part
 *.ytdl
+*.wav
 
 #Lightning logs
 lightning_logs/
