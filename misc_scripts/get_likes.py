@@ -126,12 +126,12 @@ def is_official_ted_video(video_id):
         print(f"⚠️ Failed to check video {video_id} (status code {res.status_code})")
     return False
 
-def download_youtube_video(video_id, output_path="downloads/"):
+def download_youtube_video(video_id, output_path="downloads"):
     url = f"https://www.youtube.com/watch?v={video_id}"
     with YoutubeDL(ydl_opts(output_path)) as ydl:
         try:
             #metadata = ydl.extract_info(url, download=False)
-            ydl.download([url])
+            ydl.download([url]) 
             print(f"✅ Downloaded video: {video_id}")
         except Exception as e:
             print(f"❌ Failed to download video {video_id}: {e}")
@@ -222,6 +222,8 @@ def main_script(df_main, df_metadata, video_metadata_path):
     df_main.to_csv("ted_main_refurbished.csv", index=False)
 
 if __name__ == "__main__":
+    video_id = 'GOW0IKO_zfM'
+    download_youtube_video(video_id)
     API_KEY = ""
     OFFICIAL_TED_CHANNEL_ID = "UCAuUUnT6oDeKwE6v1NGQxug"
 
