@@ -20,7 +20,6 @@ venv/
 Thumbs.db
 
 # IDE-specific files
-.vscode/
 .idea/
 
 # Test coverage reports
