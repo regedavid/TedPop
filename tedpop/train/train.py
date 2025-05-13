@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from transformers import AutoModel, AutoTokenizer
-import pandas as pd
+from transformers import AutoTokenizer
 from pytorch_lightning import Trainer
 
 from tedpop.dataset.dataset import TEDDataset, TEDMultimodalDataset, collate_fn 
