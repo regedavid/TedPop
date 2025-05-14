@@ -63,3 +63,5 @@ Pipfile.lock
 
 #Lightning logs
 lightning_logs/
+
+*.zip
