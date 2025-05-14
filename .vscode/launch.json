@@ -4,13 +4,29 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
         {
             "name": "Run Training",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/tedpop/train/train.py",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "args": [
+                "--minibatch_size", "16",
+                "--val_minibatch_size", "8",
+                "--model_type", "multimodal",
+                "--epochs", "3",
+                "--lr", "3e-5",
+                "--precision", "16",
+                "--device", "gpu",
+                "--devices", "1"
+            ]
+        },
+        {
+            "name": "Inference",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tedpop/train/inference.py",
+            "console": "integratedTerminal",
         }
     ]
 }
