@@ -28,6 +28,8 @@ class TEDDataset(Dataset):
         target = torch.tensor(target, dtype=torch.float)
         if self.transform_target == 'log':
             target = self.log_transform(target)
+        elif self.transform_target == 'log10':
+
 
         return {"text": text, "target": target}
     
@@ -37,6 +39,14 @@ class TEDDataset(Dataset):
     
     def inverse_log_transform(self, target):
         target = torch.expm1(target)
+        return target
+    
+    def log10_transform(self, target):
+        target = torch.log10(target + 1)
+        return target
+    
+    def inverse_log10_transform(self, target):
+        target = torch.pow(10, target) - 1
         return target
 
 def collate_fn(batch, tokenizer, max_length=512):

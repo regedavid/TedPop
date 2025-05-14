@@ -47,8 +47,10 @@ class TEDRegressor(pl.LightningModule):
         targets = batch["targets"]
         loss = self.loss_fn(preds, targets)
 
-        preds_exp = torch.expm1(preds)
-        targets_exp = torch.expm1(targets)
+        # preds_exp = torch.expm1(preds)
+        # targets_exp = torch.expm1(targets)
+        preds_exp = torch.pow(10, preds) - 1
+        targets_exp = torch.pow(10, targets) - 1
         rmse = torch.sqrt(torch.mean((preds_exp - targets_exp) ** 2))
 
         self.log(f"{stage}_loss", loss, prog_bar=(stage == "val"))
