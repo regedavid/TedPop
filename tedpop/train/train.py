@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
+import argparse
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 from pytorch_lightning import Trainer
 
-from tedpop.dataset.dataset import TEDDataset, TEDMultimodalDataset, collate_fn 
+from tedpop.dataset.dataset import TEDDataset, TEDMultimodalDataset, collate_fn
 from tedpop.model.model import TextEncoder, AudioEncoder
 
 class TEDRegressor(pl.LightningModule):
@@ -65,50 +66,67 @@ class TEDRegressor(pl.LightningModule):
         return optimizer
 
 if __name__ == "__main__":
-    # Load tokenizer
+    parser = argparse.ArgumentParser(description="Train TED popularity regressor")
+
+    parser.add_argument("--minibatch_size", type=int, default=32, help="Training batch size")
+    parser.add_argument("--val_minibatch_size", type=int, default=16, help="Validation batch size")
+    parser.add_argument("--model_type", type=str, default="text", choices=["text", "multimodal"], help="Model type")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--lr", type=float, default=2e-5, help="Learning rate")
+    parser.add_argument("--precision", type=int, default=16, help="Mixed precision (16 or 32)")
+    parser.add_argument("--device", type=str, default="gpu", choices=["cpu", "gpu"], help="Device to train on")
+    parser.add_argument("--devices", type=int, default=1, help="Number of devices (GPUs/CPUs) to use")
+
+    args = parser.parse_args()
+
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
-    # Load datasets
-    # train_dataset = TEDDataset(
-    #     csv_file="tedpop/dataset/train.csv",
-    #     text_column="transcript",
-    #     target_column="viewCount",
-    #     transform_target='log'
-    # )
+    if args.model_type == "multimodal":
+        train_dataset = TEDMultimodalDataset(
+            csv_file="tedpop/dataset/train_filtered.csv",
+            audio_dir="audio_wav/",
+            text_column="transcript",
+            target_column="viewCount",
+            transform_target='log'
+        )
+        val_dataset = TEDMultimodalDataset(
+            csv_file="tedpop/dataset/val_filtered.csv",
+            audio_dir="audio_wav/",
+            text_column="transcript",
+            target_column="viewCount",
+            transform_target='log'
+        )
+        audio_encoder = AudioEncoder()
+    else:
+        train_dataset = TEDDataset(
+            csv_file="tedpop/dataset/train_filtered.csv",
+            text_column="transcript",
+            target_column="viewCount",
+            transform_target='log'
+        )
+        val_dataset = TEDDataset(
+            csv_file="tedpop/dataset/val_filtered.csv",
+            text_column="transcript",
+            target_column="viewCount",
+            transform_target='log'
+        )
+        audio_encoder = None
+    collate = lambda batch: collate_fn(batch, tokenizer)
+    train_loader = DataLoader(train_dataset, batch_size=args.minibatch_size, shuffle=True, collate_fn=collate)
+    val_loader = DataLoader(val_dataset, batch_size=args.val_minibatch_size, shuffle=False, collate_fn=collate)
 
-    # val_dataset = TEDDataset(
-    #     csv_file="tedpop/dataset/val.csv",
-    #     text_column="transcript",
-    #     target_column="viewCount",
-    #     transform_target='log'
-    # )
-    train_dataset = TEDMultimodalDataset(
-        csv_file="tedpop/dataset/train_filtered.csv",
-        audio_dir="audio_wav/",
-        text_column="transcript",
-        target_column="viewCount",
-        transform_target='log'
+    model = TEDRegressor(
+        text_encoder=TextEncoder("bert-base-uncased"),
+        audio_encoder=audio_encoder,
+        lr=args.lr
     )
-
-    val_dataset = TEDMultimodalDataset(
-        csv_file="tedpop/dataset/val_filtered.csv",
-        audio_dir="audio_wav/",
-        text_column="transcript",
-        target_column="viewCount",
-        transform_target='log'
-    )
-
-
-    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True, collate_fn=lambda batch: collate_fn(batch, tokenizer))
-    val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False, collate_fn=lambda batch: collate_fn(batch, tokenizer))
-
-    model = TEDRegressor(text_encoder=TextEncoder('bert-base-uncased'), audio_encoder=AudioEncoder(), lr=2e-5)
 
     trainer = Trainer(
-        max_epochs=5,
-        accelerator="gpu",  
-        devices=1,          
-        precision=16,       
+        max_epochs=args.epochs,
+        accelerator=args.device,
+        devices=args.devices,
+        precision=args.precision,
     )
 
     trainer.fit(model, train_loader, val_loader)
+    
