@@ -96,7 +96,7 @@ if __name__ == "__main__":
             audio_dir="audio_wav/",
             text_column="transcript",
             target_column="viewCount",
-            transform_target='log'
+            transform_target='quantile'
         )
         audio_encoder = AudioEncoder()
     else:
@@ -104,13 +104,13 @@ if __name__ == "__main__":
             csv_file="tedpop/dataset/train_filtered.csv",
             text_column="transcript",
             target_column="viewCount",
-            transform_target='log'
+            transform_target='quantile'
         )
         val_dataset = TEDDataset(
             csv_file="tedpop/dataset/val_filtered.csv",
             text_column="transcript",
             target_column="viewCount",
-            transform_target='log'
+            transform_target='quantile'
         )
         audio_encoder = None
     collate = lambda batch: collate_fn(batch, tokenizer)
