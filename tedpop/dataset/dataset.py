@@ -12,14 +12,14 @@ from torch.nn import functional as F
 from sklearn.preprocessing import QuantileTransformer
 
 class TEDDataset(Dataset):
-    def __init__(self, csv_file, text_column="transcript", target_column="viewCount", transform_target='log'):
+    def __init__(self, csv_file, text_column="transcript", target_column="viewCount", transform_type='log'):
         self.data = pd.read_csv(csv_file)
         self.text_column = text_column
         self.target_column = target_column
-        self.transform_target = transform_target
+        self.transform_type = transform_type
         self.data = self.data.dropna(subset=[self.text_column, self.target_column])
         self.raw_targets = self.data[self.target_column].values.astype(np.float32)
-        self._fit_transformer()
+        self._fit_transform_function()
 
     def __len__(self):
         return len(self.data)
@@ -35,41 +35,66 @@ class TEDDataset(Dataset):
         return {"text": text, "target": torch.tensor(target, dtype=torch.float32)}
     
     def _transform_target(self, target):
-        if self.transform_target == "log":
+        if self.transform_type == "log":
             return np.log1p(target)
-        elif self.transform_target == "log10":
+        elif self.transform_type == "log10":
             return np.log10(target + 1)
-        elif self.transform_target == "zscore":
+        elif self.transform_type == "zscore":
             return (target - self.mean) / self.std
-        elif self.transform_target == "quantile":
+        elif self.transform_type == "quantile":
             return self.quantile_transformer.transform([[target]])[0, 0]
-        elif self.transform_target == "cbrt":
+        elif self.transform_type == "cbrt":
             return np.cbrt(target)
         else:
             return target  # no transform
 
-    def _inverse_transform(self, target_tensor):
-        target = target_tensor.detach().cpu().numpy()
-        if self.transform_target == "log":
-            return np.expm1(target)
-        elif self.transform_target == "log10":
-            return (10 ** target) - 1
-        elif self.transform_target == "zscore":
-            return (target * self.std) + self.mean
-        elif self.transform_target == "quantile":
-            return self.quantile_transformer.inverse_transform(target.reshape(-1, 1)).flatten()
-        elif self.transform_target == "cbrt":
-            return np.power(target, 3)
+    def inverse_transform(self, target_tensor):
+    # Convert to float64 numpy array for safe math
+        target = target_tensor.detach().cpu().numpy().astype(np.float64)
+
+        if self.transform_type == "log":
+            result = np.expm1(target)
+
+        elif self.transform_type == "log10":
+            result = (10 ** target) - 1
+
+        elif self.transform_type == "zscore":
+            result = (target * self.std.item()) + self.mean.item()
+
+        elif self.transform_type == "quantile":
+            result = self.quantile_transformer.inverse_transform(target.reshape(-1, 1)).flatten()
+
+        elif self.transform_type == "cbrt":
+            result = np.power(target, 3)
         else:
-            return target
+            result = target
+
+        # Return as float32 Torch tensor
+        return torch.tensor(result, dtype=torch.float32)
+    
+    # def inverse_transform(self, target):
+    #     if self.transform_type == "log":
+    #         return torch.expm1(target)
+    #     elif self.transform_type == "log10":
+    #         return torch.pow(10, target) - 1
+    #     elif self.transform_type == "zscore":
+    #         return (target * self.std) + self.mean
+    #     elif self.transform_type == "quantile":
+    #         target = target.detach().cpu().numpy()
+    #         return self.quantile_transformer.inverse_transform(target.reshape(-1, 1)).flatten()
+    #     elif self.transform_type == "cbrt":
+    #         return torch.sign(target) * torch.pow(torch.abs(target), 3)
+    #     else:
+    #         return target
         
-    def _fit_transformer(self):
-        if self.transform_target == "zscore":
+    def _fit_transform_function(self):
+        if self.transform_type == "zscore":
             self.mean = self.raw_targets.mean()
             self.std = self.raw_targets.std()
-        elif self.transform_target == "quantile":
+        elif self.transform_type == "quantile":
             self.quantile_transformer = QuantileTransformer(n_quantiles=100, output_distribution="uniform", random_state=42)
             self.quantile_transformer.fit(self.raw_targets.reshape(-1, 1))
+
 
 def collate_fn(batch, tokenizer, max_length=512):
     texts = [item["text"] for item in batch]
@@ -103,8 +128,8 @@ def collate_fn(batch, tokenizer, max_length=512):
     return batch_dict
 
 class TEDMultimodalDataset(TEDDataset):
-    def __init__(self, csv_file, audio_dir, text_column="transcript", target_column="viewCount", transform_target='log'):
-        super().__init__(csv_file, text_column, target_column, transform_target)
+    def __init__(self, csv_file, audio_dir, text_column="transcript", target_column="viewCount", transform_type='log'):
+        super().__init__(csv_file, text_column, target_column, transform_type)
         self.audio_dir = audio_dir
 
     def __getitem__(self, idx):

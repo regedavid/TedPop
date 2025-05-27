@@ -10,9 +10,9 @@ from tedpop.dataset.dataset import TEDDataset, TEDMultimodalDataset, collate_fn
 from tedpop.model.model import TextEncoder, AudioEncoder
 
 class TEDRegressor(pl.LightningModule):
-    def __init__(self, text_encoder, audio_encoder=None, lr=2e-5):
+    def __init__(self, text_encoder, audio_encoder=None, lr=2e-5, inverse_transform_fn=None):
         super().__init__()
-        self.save_hyperparameters(ignore=["text_encoder", "audio_encoder"])
+        self.save_hyperparameters(ignore=["text_encoder", "audio_encoder", "inverse_transform_fn"])
 
         self.text_encoder = text_encoder
         self.audio_encoder = audio_encoder
@@ -27,6 +27,7 @@ class TEDRegressor(pl.LightningModule):
         )
 
         self.loss_fn = nn.MSELoss()
+        self.inverse_transform_fn = inverse_transform_fn
 
     def forward(self, input_ids, attention_mask, audio=None):
         text_fea = self.text_encoder(input_ids, attention_mask)
@@ -47,11 +48,14 @@ class TEDRegressor(pl.LightningModule):
         targets = batch["targets"]
         loss = self.loss_fn(preds, targets)
 
-        # preds_exp = torch.expm1(preds)
-        # targets_exp = torch.expm1(targets)
-        preds_exp = torch.pow(10, preds) - 1
-        targets_exp = torch.pow(10, targets) - 1
-        rmse = torch.sqrt(torch.mean((preds_exp - targets_exp) ** 2))
+        if self.inverse_transform_fn is not None:
+            preds_exp = self.inverse_transform_fn(preds)
+            targets_exp = self.inverse_transform_fn(targets)
+            print("Target (original):", targets_exp[:5])
+            print("Predicted:", preds_exp[:5])
+            rmse = torch.sqrt(torch.mean((preds_exp - targets_exp) ** 2))
+        else:
+            rmse = torch.tensor(0.0, device=preds.device)
 
         self.log(f"{stage}_loss", loss, prog_bar=(stage == "val"))
         self.log(f"{stage}_rmse", rmse, prog_bar=(stage == "val"))
@@ -73,14 +77,16 @@ if __name__ == "__main__":
     parser.add_argument("--minibatch_size", type=int, default=32, help="Training batch size")
     parser.add_argument("--val_minibatch_size", type=int, default=16, help="Validation batch size")
     parser.add_argument("--model_type", type=str, default="text", choices=["text", "multimodal"], help="Model type")
-    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--transform_type", type=str, default="log", choices=["log", "log10", "zscore", "quantile", "cbrt"], help="Transform type")
+    parser.add_argument("--epochs", type=int, default=15, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--precision", type=int, default=16, help="Mixed precision (16 or 32)")
     parser.add_argument("--device", type=str, default="gpu", choices=["cpu", "gpu"], help="Device to train on")
     parser.add_argument("--devices", type=int, default=1, help="Number of devices (GPUs/CPUs) to use")
+    
 
     args = parser.parse_args()
-
+    print(args.model_type, args.transform_type)
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
     if args.model_type == "multimodal":
@@ -89,14 +95,14 @@ if __name__ == "__main__":
             audio_dir="audio_wav/",
             text_column="transcript",
             target_column="viewCount",
-            transform_target='log'
+            transform_type=args.transform_type
         )
         val_dataset = TEDMultimodalDataset(
             csv_file="tedpop/dataset/val_filtered.csv",
             audio_dir="audio_wav/",
             text_column="transcript",
             target_column="viewCount",
-            transform_target='quantile'
+            transform_type=args.transform_type
         )
         audio_encoder = AudioEncoder()
     else:
@@ -104,13 +110,13 @@ if __name__ == "__main__":
             csv_file="tedpop/dataset/train_filtered.csv",
             text_column="transcript",
             target_column="viewCount",
-            transform_target='quantile'
+            transform_type=args.transform_type
         )
         val_dataset = TEDDataset(
             csv_file="tedpop/dataset/val_filtered.csv",
             text_column="transcript",
             target_column="viewCount",
-            transform_target='quantile'
+            transform_type=args.transform_type
         )
         audio_encoder = None
     collate = lambda batch: collate_fn(batch, tokenizer)
@@ -120,7 +126,8 @@ if __name__ == "__main__":
     model = TEDRegressor(
         text_encoder=TextEncoder("bert-base-uncased"),
         audio_encoder=audio_encoder,
-        lr=args.lr
+        lr=args.lr,
+        inverse_transform_fn=train_dataset.inverse_transform
     )
 
     trainer = Trainer(
