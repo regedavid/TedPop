@@ -10,7 +10,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from datetime import datetime
 
 from tedpop.dataset.dataset import TEDDataset, TEDMultimodalDataset, TEDDatasetQuantile, collate_fn, _dataset
-from tedpop.model.model import TextEncoder, AudioEncoder, TransformerTextEncoder
+from tedpop.model.model import TextEncoder, AudioEncoder, TransformerTextEncoder, BidirectionalCrossAttention
 
 class TEDRegressor(pl.LightningModule):
     def __init__(self, text_encoder, audio_encoder=None, lr=2e-5, inverse_transform_fn=None):
@@ -80,7 +80,7 @@ class TEDRegressor(pl.LightningModule):
     
     
 class TEDClassifier(pl.LightningModule):
-    def __init__(self, text_encoder, audio_encoder=None, lr=2e-5, num_classes=10):
+    def __init__(self, text_encoder, audio_encoder=None, lr=2e-5, num_classes=10, use_cross_attention=False):
         super().__init__()
         self.save_hyperparameters(ignore=["text_encoder", "audio_encoder"])
 
@@ -88,10 +88,20 @@ class TEDClassifier(pl.LightningModule):
         self.audio_encoder = audio_encoder
         self.lr = lr
         self.num_classes = num_classes
+        self.use_cross_attn = use_cross_attention
 
         input_dim = self.text_encoder.output_dim
         if self.audio_encoder is not None:
-            input_dim += self.audio_encoder.output_dim
+            if self.use_cross_attn:
+                self.cross_attn = BidirectionalCrossAttention(
+                text_dim=self.text_encoder.output_dim,
+                audio_dim=self.audio_encoder.output_dim,
+                shared_dim=256
+            )
+                input_dim = self.cross_attn.shared_dim * 2
+            else:
+                input_dim += self.audio_encoder.output_dim
+
 
         self.classifier = nn.Sequential(
             nn.Linear(input_dim, input_dim//2),
@@ -104,8 +114,17 @@ class TEDClassifier(pl.LightningModule):
     def forward(self, input_ids, attention_mask, audio=None):
         text_fea = self.text_encoder(input_ids, src_mask=~attention_mask.bool())
         if self.audio_encoder is not None and audio is not None:
-            audio_feat = self.audio_encoder(audio)
-            features = torch.cat((text_fea, audio_feat), dim=1)
+            if self.use_cross_attn is False:
+                audio_feat = self.audio_encoder(audio)
+                features = torch.cat((text_fea, audio_feat), dim=1)
+            else:
+                text_seq = self.text_encoder.get_sequence(input_ids, ~attention_mask.bool())  # [B, T_text, D]
+                audio_seq = self.audio_encoder(audio, return_sequence=True)                    # [B, T_audio, D]
+                text_enh, audio_enh = self.cross_attn(text_seq, audio_seq)
+                # Pool and concatenate
+                text_vec = text_enh.mean(dim=1)
+                audio_vec = audio_enh.mean(dim=1)
+                features = torch.cat([text_vec, audio_vec], dim=1)
         else:
             features = text_fea
         logits = self.classifier(features)
@@ -160,6 +179,8 @@ if __name__ == "__main__":
     parser.add_argument("--devices", type=int, default=1, help="Number of devices (GPUs/CPUs) to use")
     parser.add_argument("--trainer_type", type=str, default="classifier", choices=["classifier", "regressor"], help="Trainer type. Can be a classifier or regressor model")
     parser.add_argument("--run_name", type=str, default="baseline", help="Custom run folder name for TensorBoard")
+    parser.add_argument("--use_cross_attention", action="store_true", help="Enable cross-attention between modalities")
+
     
 
     args = parser.parse_args()
@@ -170,26 +191,26 @@ if __name__ == "__main__":
     else:
         audio_encoder = None
         
-        train_dataset = _dataset(
-            trainer_type=args.trainer_type,
-            model_type=args.model_type,
-            csv_file="tedpop/dataset/train_filtered.csv",
-            audio_dir="audio_wav/",
-            text_column="transcript",
-            target_column="viewCount",
-            transform_type=args.transform_type,
-            num_classes=10
-        )
-        val_dataset = _dataset(
-            trainer_type=args.trainer_type,
-            model_type=args.model_type,
-            csv_file="tedpop/dataset/val_filtered.csv",
-            audio_dir="audio_wav/",
-            text_column="transcript",
-            target_column="viewCount",
-            transform_type=args.transform_type,
-            num_classes=10
-        )
+    train_dataset = _dataset(
+        trainer_type=args.trainer_type,
+        model_type=args.model_type,
+        csv_file="tedpop/dataset/train_filtered.csv",
+        audio_dir="audio_wav/",
+        text_column="transcript",
+        target_column="viewCount",
+        transform_type=args.transform_type,
+        num_classes=10
+    )
+    val_dataset = _dataset(
+        trainer_type=args.trainer_type,
+        model_type=args.model_type,
+        csv_file="tedpop/dataset/val_filtered.csv",
+        audio_dir="audio_wav/",
+        text_column="transcript",
+        target_column="viewCount",
+        transform_type=args.transform_type,
+        num_classes=10
+    )
     collate = lambda batch: collate_fn(batch, tokenizer)
     train_loader = DataLoader(train_dataset, batch_size=args.minibatch_size, shuffle=True, collate_fn=collate)
     val_loader = DataLoader(val_dataset, batch_size=args.val_minibatch_size, shuffle=False, collate_fn=collate)
@@ -205,7 +226,8 @@ if __name__ == "__main__":
             text_encoder=TransformerTextEncoder(vocab_size=tokenizer.vocab_size),
             audio_encoder=audio_encoder,
             lr=args.lr,
-            num_classes=10
+            num_classes=10,
+            use_cross_attention=False if args.model_type == "text" else args.use_cross_attention
         )
     run_name = f"{args.run_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     logger = TensorBoardLogger(
