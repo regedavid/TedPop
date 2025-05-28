@@ -9,7 +9,7 @@ import numpy as np
 import os
 import soundfile as sf
 from torch.nn import functional as F
-from sklearn.preprocessing import QuantileTransformer
+from sklearn.preprocessing import QuantileTransformer, MinMaxScaler
 
 class TEDDataset(Dataset):
     def __init__(self, csv_file, text_column="transcript", target_column="viewCount", transform_type='log'):
@@ -20,6 +20,9 @@ class TEDDataset(Dataset):
         self.data = self.data.dropna(subset=[self.text_column, self.target_column])
         self.raw_targets = self.data[self.target_column].values.astype(np.float32)
         self._fit_transform_function()
+        
+        scaler = MinMaxScaler()
+        self.data[self.target_column] = scaler.fit_transform(self.data[[self.target_column]])
 
     def __len__(self):
         return len(self.data)
@@ -149,3 +152,77 @@ class TEDMultimodalDataset(TEDDataset):
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
 
         return mfcc
+    
+class TEDDatasetQuantile(torch.utils.data.Dataset):
+    def __init__(self, csv_file, text_column="transcript", target_column="viewCount", num_classes=10):
+        self.data = pd.read_csv(csv_file)
+        self.text_column = text_column
+        self.target_column = target_column
+        self.num_classes = num_classes
+        self.data = self.data.dropna(subset=[self.text_column, self.target_column])
+        scaler = MinMaxScaler()
+        self.data[self.target_column] = scaler.fit_transform(self.data[[self.target_column]])
+
+        self.data["popularity_class"] = pd.qcut(
+            self.data[self.target_column],
+            q=self.num_classes,
+            labels=False
+        )
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        row = self.data.iloc[idx]
+        text = row[self.text_column]
+        label = row["popularity_class"]
+        return {
+            "text": text,
+            "target": torch.tensor(label, dtype=torch.long)
+        }
+        
+
+class TEDMultimodalDatasetQuantile(TEDDataset):
+    def __init__(self, csv_file, audio_dir, text_column="transcript", target_column="viewCount", num_classes=10):
+        super().__init__(csv_file, text_column, target_column, num_classes)
+        self.audio_dir = audio_dir
+
+    def __getitem__(self, idx):
+        item = super().__getitem__(idx)
+        row = self.data.iloc[idx]
+        
+        talk_id = row['video_id']
+        audio_path = os.path.join(self.audio_dir, f"{talk_id}.wav")
+        audio_fea = self.compute_mfcc(audio_path)
+
+
+        item["audio"] = torch.tensor(audio_fea, dtype=torch.float)
+        return item
+    
+    def compute_mfcc(self, audio_path, sr=16000, n_mfcc=13):
+        y, _ = librosa.load(audio_path, sr=sr)
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+
+        return mfcc
+    
+
+def _dataset(trainer_type, model_type, **kwargs):
+    if trainer_type == "regressor":
+        if model_type == "text":
+            valid_keys = {"csv_file", "text_column", "target_column", "transform_type"}
+            return TEDDataset(**{k: v for k, v in kwargs.items() if k in valid_keys})
+
+        elif model_type == "multimodal":
+            valid_keys = {"csv_file", "text_column", "target_column", "transform_type", "audio_dir"}
+            return TEDMultimodalDataset(**{k: v for k, v in kwargs.items() if k in valid_keys})
+
+    elif trainer_type == "classifier":
+        if model_type == "text":
+            valid_keys = {"csv_file", "text_column", "target_column", "num_classes"}
+            return TEDDatasetQuantile(**{k: v for k, v in kwargs.items() if k in valid_keys})
+
+        elif model_type == "multimodal":
+            valid_keys = {"csv_file", "text_column", "target_column", "num_classes", "audio_dir"}
+            return TEDMultimodalDatasetQuantile(**{k: v for k, v in kwargs.items() if k in valid_keys})
+
+    raise ValueError(f"Invalid combination: trainer_type={trainer_type}, model_type={model_type}")
