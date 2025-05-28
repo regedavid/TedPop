@@ -1,0 +1,25 @@
+CUDA_VISIBLE_DEVICES=3 python tedpop/train/train.py \
+    --run_name classifier_dropout03_lr-bigger \
+    --minibatch_size 128 \
+    --val_minibatch_size 64 \
+    --model_type text \
+    --transform_type log \
+    --epochs 100 \
+    --lr 3e-3 \
+    --precision 16 \
+    --device gpu \
+    --devices 1 \
+    --trainer_type classifier
+
+CUDA_VISIBLE_DEVICES=3 python tedpop/train/train.py \
+    --run_name classifier_transformers_lr-2e-4_mb-128 \
+    --minibatch_size 128 \
+    --val_minibatch_size 64 \
+    --model_type text \
+    --transform_type log \
+    --epochs 1000 \
+    --lr 2e-4 \
+    --precision 16 \
+    --device gpu \
+    --devices 1 \
+    --trainer_type classifier
