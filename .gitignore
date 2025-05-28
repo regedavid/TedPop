@@ -60,8 +60,11 @@ Pipfile.lock
 *.part
 *.ytdl
 *.wav
+*.npy
 
 #Lightning logs
 lightning_logs/
+
+
 
 *.zip
