@@ -5,7 +5,27 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Run Training",
+            "name": "Run Regressor",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tedpop/train/train.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--minibatch_size", "16",
+                "--val_minibatch_size", "8",
+                "--model_type", "text",
+                "--transform_type", "log",
+                "--epochs", "3",
+                "--lr", "3e-5",
+                "--precision", "16",
+                "--device", "gpu",
+                "--devices", "1",
+                "--trainer_type", "regressor",
+                 "--run_name", "debug"
+            ]
+        },
+        {
+            "name": "Run Multimodal Regressor",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/tedpop/train/train.py",
@@ -14,11 +34,55 @@
                 "--minibatch_size", "16",
                 "--val_minibatch_size", "8",
                 "--model_type", "multimodal",
+                "--transform_type", "log",
                 "--epochs", "3",
                 "--lr", "3e-5",
                 "--precision", "16",
                 "--device", "gpu",
-                "--devices", "1"
+                "--devices", "1",
+                "--trainer_type", "regressor",
+                "--run_name", "debug"
+
+            ]
+        },
+        {
+            "name": "Run Classifier",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tedpop/train/train.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--minibatch_size", "16",
+                "--val_minibatch_size", "8",
+                "--model_type", "text",
+                "--transform_type", "log",
+                "--epochs", "3",
+                "--lr", "3e-5",
+                "--precision", "16",
+                "--device", "gpu",
+                "--devices", "1",
+                "--trainer_type", "classifier",
+                 "--run_name", "debug"
+            ]
+        },
+        {
+            "name": "Run Multimodal Classifier",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tedpop/train/train.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--minibatch_size", "16",
+                "--val_minibatch_size", "8",
+                "--model_type", "multimodal",
+                "--transform_type", "log",
+                "--epochs", "3",
+                "--lr", "3e-5",
+                "--precision", "16",
+                "--device", "gpu",
+                "--devices", "1",
+                "--trainer_type", "classifier",
+                 "--run_name", "debug"
             ]
         },
         {
